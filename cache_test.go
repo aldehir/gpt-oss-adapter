@@ -3,7 +3,6 @@ package main
 import (
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,8 +37,8 @@ func TestLRUCache_PutAndGet(t *testing.T) {
 		ops      []struct {
 			action   string
 			key      string
-			item     CacheItem
-			expected CacheItem
+			item     ReasoningItem
+			expected ReasoningItem
 			found    bool
 		}
 	}{
@@ -49,12 +48,12 @@ func TestLRUCache_PutAndGet(t *testing.T) {
 			ops: []struct {
 				action   string
 				key      string
-				item     CacheItem
-				expected CacheItem
+				item     ReasoningItem
+				expected ReasoningItem
 				found    bool
 			}{
-				{"put", "key1", CacheItem{ID: "id1", Content: "content1"}, CacheItem{}, false},
-				{"get", "key1", CacheItem{}, CacheItem{ID: "id1", Content: "content1"}, true},
+				{"put", "key1", ReasoningItem{ID: "id1", Content: "content1"}, ReasoningItem{}, false},
+				{"get", "key1", ReasoningItem{}, ReasoningItem{ID: "id1", Content: "content1"}, true},
 			},
 		},
 		{
@@ -63,15 +62,15 @@ func TestLRUCache_PutAndGet(t *testing.T) {
 			ops: []struct {
 				action   string
 				key      string
-				item     CacheItem
-				expected CacheItem
+				item     ReasoningItem
+				expected ReasoningItem
 				found    bool
 			}{
-				{"put", "key1", CacheItem{ID: "id1", Content: "content1"}, CacheItem{}, false},
-				{"put", "key2", CacheItem{ID: "id2", Content: "content2"}, CacheItem{}, false},
-				{"get", "key1", CacheItem{}, CacheItem{ID: "id1", Content: "content1"}, true},
-				{"get", "key2", CacheItem{}, CacheItem{ID: "id2", Content: "content2"}, true},
-				{"get", "nonexistent", CacheItem{}, CacheItem{}, false},
+				{"put", "key1", ReasoningItem{ID: "id1", Content: "content1"}, ReasoningItem{}, false},
+				{"put", "key2", ReasoningItem{ID: "id2", Content: "content2"}, ReasoningItem{}, false},
+				{"get", "key1", ReasoningItem{}, ReasoningItem{ID: "id1", Content: "content1"}, true},
+				{"get", "key2", ReasoningItem{}, ReasoningItem{ID: "id2", Content: "content2"}, true},
+				{"get", "nonexistent", ReasoningItem{}, ReasoningItem{}, false},
 			},
 		},
 		{
@@ -80,13 +79,13 @@ func TestLRUCache_PutAndGet(t *testing.T) {
 			ops: []struct {
 				action   string
 				key      string
-				item     CacheItem
-				expected CacheItem
+				item     ReasoningItem
+				expected ReasoningItem
 				found    bool
 			}{
-				{"put", "key1", CacheItem{ID: "id1", Content: "content1"}, CacheItem{}, false},
-				{"put", "key1", CacheItem{ID: "id1", Content: "updated_content"}, CacheItem{}, false},
-				{"get", "key1", CacheItem{}, CacheItem{ID: "id1", Content: "updated_content"}, true},
+				{"put", "key1", ReasoningItem{ID: "id1", Content: "content1"}, ReasoningItem{}, false},
+				{"put", "key1", ReasoningItem{ID: "id1", Content: "updated_content"}, ReasoningItem{}, false},
+				{"get", "key1", ReasoningItem{}, ReasoningItem{ID: "id1", Content: "updated_content"}, true},
 			},
 		},
 	}
@@ -105,7 +104,6 @@ func TestLRUCache_PutAndGet(t *testing.T) {
 					if found {
 						assert.Equal(t, op.expected.ID, item.ID)
 						assert.Equal(t, op.expected.Content, item.Content)
-						assert.WithinDuration(t, time.Now(), item.LastUsed, time.Second)
 					}
 				}
 			}
@@ -120,7 +118,7 @@ func TestLRUCache_EvictionBehavior(t *testing.T) {
 		sequence []struct {
 			action string
 			key    string
-			item   CacheItem
+			item   ReasoningItem
 		}
 		finalChecks []struct {
 			key   string
@@ -133,11 +131,11 @@ func TestLRUCache_EvictionBehavior(t *testing.T) {
 			sequence: []struct {
 				action string
 				key    string
-				item   CacheItem
+				item   ReasoningItem
 			}{
-				{"put", "key1", CacheItem{ID: "id1", Content: "content1"}},
-				{"put", "key2", CacheItem{ID: "id2", Content: "content2"}},
-				{"put", "key3", CacheItem{ID: "id3", Content: "content3"}},
+				{"put", "key1", ReasoningItem{ID: "id1", Content: "content1"}},
+				{"put", "key2", ReasoningItem{ID: "id2", Content: "content2"}},
+				{"put", "key3", ReasoningItem{ID: "id3", Content: "content3"}},
 			},
 			finalChecks: []struct {
 				key   string
@@ -154,12 +152,12 @@ func TestLRUCache_EvictionBehavior(t *testing.T) {
 			sequence: []struct {
 				action string
 				key    string
-				item   CacheItem
+				item   ReasoningItem
 			}{
-				{"put", "key1", CacheItem{ID: "id1", Content: "content1"}},
-				{"put", "key2", CacheItem{ID: "id2", Content: "content2"}},
-				{"get", "key1", CacheItem{}},
-				{"put", "key3", CacheItem{ID: "id3", Content: "content3"}},
+				{"put", "key1", ReasoningItem{ID: "id1", Content: "content1"}},
+				{"put", "key2", ReasoningItem{ID: "id2", Content: "content2"}},
+				{"get", "key1", ReasoningItem{}},
+				{"put", "key3", ReasoningItem{ID: "id3", Content: "content3"}},
 			},
 			finalChecks: []struct {
 				key   string
@@ -208,7 +206,7 @@ func TestLRUCache_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
 				key := "key" + string(rune(id*numOperations+j))
-				item := CacheItem{
+				item := ReasoningItem{
 					ID:      "id" + string(rune(id*numOperations+j)),
 					Content: "content" + string(rune(id*numOperations+j)),
 				}
@@ -239,7 +237,7 @@ func TestLRUCache_EdgeCases(t *testing.T) {
 			name: "zero capacity cache",
 			test: func(t *testing.T) {
 				cache := NewLRUCache(0)
-				cache.Put("key1", CacheItem{ID: "id1", Content: "content1"})
+				cache.Put("key1", ReasoningItem{ID: "id1", Content: "content1"})
 				assert.Equal(t, 0, cache.Size())
 				_, found := cache.Get("key1")
 				assert.False(t, found)
@@ -249,10 +247,10 @@ func TestLRUCache_EdgeCases(t *testing.T) {
 			name: "single capacity cache",
 			test: func(t *testing.T) {
 				cache := NewLRUCache(1)
-				cache.Put("key1", CacheItem{ID: "id1", Content: "content1"})
+				cache.Put("key1", ReasoningItem{ID: "id1", Content: "content1"})
 				assert.Equal(t, 1, cache.Size())
 
-				cache.Put("key2", CacheItem{ID: "id2", Content: "content2"})
+				cache.Put("key2", ReasoningItem{ID: "id2", Content: "content2"})
 				assert.Equal(t, 1, cache.Size())
 
 				_, found := cache.Get("key1")
@@ -281,7 +279,7 @@ func TestLRUCache_UtilityMethods(t *testing.T) {
 			capacity: 5,
 			setup: func(c *LRUCache) {
 				for i := 0; i < 3; i++ {
-					c.Put("key"+string(rune(i)), CacheItem{ID: "id" + string(rune(i))})
+					c.Put("key"+string(rune(i)), ReasoningItem{ID: "id" + string(rune(i))})
 				}
 			},
 			test: func(t *testing.T, c *LRUCache) {
@@ -293,7 +291,7 @@ func TestLRUCache_UtilityMethods(t *testing.T) {
 			capacity: 3,
 			setup: func(c *LRUCache) {
 				for i := 0; i < 3; i++ {
-					c.Put("key"+string(rune(i)), CacheItem{ID: "id" + string(rune(i))})
+					c.Put("key"+string(rune(i)), ReasoningItem{ID: "id" + string(rune(i))})
 				}
 			},
 			test: func(t *testing.T, c *LRUCache) {
@@ -315,24 +313,4 @@ func TestLRUCache_UtilityMethods(t *testing.T) {
 			tt.test(t, cache)
 		})
 	}
-}
-
-func TestLRUCache_LastUsedTimestamp(t *testing.T) {
-	cache := NewLRUCache(2)
-	startTime := time.Now()
-
-	item := CacheItem{ID: "id1", Content: "content1"}
-	cache.Put("key1", item)
-
-	retrieved, found := cache.Get("key1")
-	require.True(t, found)
-	assert.True(t, retrieved.LastUsed.After(startTime))
-	assert.WithinDuration(t, time.Now(), retrieved.LastUsed, time.Second)
-
-	time.Sleep(10 * time.Millisecond)
-	firstAccess := retrieved.LastUsed
-
-	retrieved2, found := cache.Get("key1")
-	require.True(t, found)
-	assert.True(t, retrieved2.LastUsed.After(firstAccess))
 }

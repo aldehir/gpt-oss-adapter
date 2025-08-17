@@ -3,13 +3,11 @@ package main
 import (
 	"container/list"
 	"sync"
-	"time"
 )
 
-type CacheItem struct {
-	ID       string
-	Content  string
-	LastUsed time.Time
+type ReasoningItem struct {
+	ID      string
+	Content string
 }
 
 type LRUCache struct {
@@ -21,7 +19,7 @@ type LRUCache struct {
 
 type cacheEntry struct {
 	key  string
-	item CacheItem
+	item ReasoningItem
 }
 
 func NewLRUCache(capacity int) *LRUCache {
@@ -32,28 +30,25 @@ func NewLRUCache(capacity int) *LRUCache {
 	}
 }
 
-func (c *LRUCache) Get(key string) (CacheItem, bool) {
+func (c *LRUCache) Get(key string) (ReasoningItem, bool) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	if elem, exists := c.cache[key]; exists {
 		c.list.MoveToFront(elem)
 		entry := elem.Value.(*cacheEntry)
-		entry.item.LastUsed = time.Now()
 		return entry.item, true
 	}
-	return CacheItem{}, false
+	return ReasoningItem{}, false
 }
 
-func (c *LRUCache) Put(key string, item CacheItem) {
+func (c *LRUCache) Put(key string, item ReasoningItem) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
 	if c.capacity <= 0 {
 		return
 	}
-
-	item.LastUsed = time.Now()
 
 	if elem, exists := c.cache[key]; exists {
 		c.list.MoveToFront(elem)
