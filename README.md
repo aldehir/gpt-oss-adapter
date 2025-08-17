@@ -12,9 +12,6 @@ include this context in subsequent requests. It handles this by:
 - **Provider Support**: Automatically maps fields based on the target provider
   (LM Studio, llama.cpp)
 
-- **Reasoning Effort**: Extracts `reasoning.effort` from requests and maps it
-  to the appropriate provider field
-
 - **Caching**: Stores reasoning content from tool call responses and
   automatically injects it into subsequent requests
 
