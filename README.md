@@ -80,7 +80,7 @@ gpt-oss-adapter \
 gpt-oss-adapter \
   --target http://localhost:8000 \
   --listen :8005 \
-  --provider llamacpp \
+  --provider llama-cpp \
   --verbose
 ```
 
