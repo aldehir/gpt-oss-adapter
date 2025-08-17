@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/aldehir/gpt-oss-adapter/providers/types"
 )
 
 type Cache interface {
@@ -17,25 +19,23 @@ type Cache interface {
 }
 
 type Adapter struct {
-	Target        string
-	ReasoningFrom string
-	ReasoningTo   string
-	mux           *http.ServeMux
-	client        *http.Client
-	cache         Cache
-	logger        *slog.Logger
+	Target   string
+	Provider types.Provider
+	mux      *http.ServeMux
+	client   *http.Client
+	cache    Cache
+	logger   *slog.Logger
 }
 
-func NewAdapter(target string, cache Cache, logger *slog.Logger, reasoningFrom, reasoningTo string) *Adapter {
+func NewAdapter(target string, cache Cache, logger *slog.Logger, provider types.Provider) *Adapter {
 	mux := http.NewServeMux()
 	adapter := &Adapter{
-		Target:        target,
-		ReasoningFrom: reasoningFrom,
-		ReasoningTo:   reasoningTo,
-		mux:           mux,
-		client:        &http.Client{},
-		cache:         cache,
-		logger:        logger,
+		Target:   target,
+		Provider: provider,
+		mux:      mux,
+		client:   &http.Client{},
+		cache:    cache,
+		logger:   logger,
 	}
 
 	mux.HandleFunc("/v1/chat/completions", adapter.handleChatCompletions)
@@ -227,10 +227,10 @@ func (a *Adapter) transformReasoningContentToReasoning(responseData map[string]a
 		return
 	}
 
-	if reasoningContent, ok := message[a.ReasoningFrom].(string); ok {
-		message[a.ReasoningTo] = reasoningContent
-		delete(message, a.ReasoningFrom)
-		a.logger.Debug("transformed reasoning field", "from", a.ReasoningFrom, "to", a.ReasoningTo)
+	if reasoningContent, ok := message[a.Provider.Reasoning].(string); ok {
+		message["reasoning"] = reasoningContent
+		delete(message, a.Provider.Reasoning)
+		a.logger.Debug("transformed reasoning field", "from", a.Provider.Reasoning, "to", "reasoning")
 	}
 }
 
@@ -269,9 +269,9 @@ func (a *Adapter) injectReasoningFromCache(requestData map[string]any) {
 			}
 
 			if item, found := a.cache.Get(id); found {
-				message[a.ReasoningFrom] = item.Content
+				message[a.Provider.Reasoning] = item.Content
 				injectedCount++
-				a.logger.Debug("injected reasoning content from cache", "tool_call_id", id, "field", a.ReasoningFrom)
+				a.logger.Debug("injected reasoning content from cache", "tool_call_id", id, "field", a.Provider.Reasoning)
 				break
 			}
 		}
@@ -303,7 +303,7 @@ func (a *Adapter) extractAndCacheReasoning(responseData map[string]any) {
 		return
 	}
 
-	reasoningContent, ok := message[a.ReasoningFrom].(string)
+	reasoningContent, ok := message[a.Provider.Reasoning].(string)
 	if !ok {
 		return
 	}
@@ -423,9 +423,9 @@ func (a *Adapter) transformStreamingLine(line string) string {
 		return line
 	}
 
-	if reasoningContent, ok := delta[a.ReasoningFrom].(string); ok {
-		delta[a.ReasoningTo] = reasoningContent
-		delete(delta, a.ReasoningFrom)
+	if reasoningContent, ok := delta[a.Provider.Reasoning].(string); ok {
+		delta["reasoning"] = reasoningContent
+		delete(delta, a.Provider.Reasoning)
 
 		modifiedData, err := json.Marshal(eventData)
 		if err != nil {
@@ -453,7 +453,7 @@ func (a *Adapter) processStreamingDelta(eventData map[string]any, reasoningConte
 		return
 	}
 
-	if reasoningDelta, ok := delta[a.ReasoningFrom].(string); ok {
+	if reasoningDelta, ok := delta[a.Provider.Reasoning].(string); ok {
 		reasoningContent.WriteString(reasoningDelta)
 	}
 

@@ -11,16 +11,20 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/aldehir/gpt-oss-adapter/providers/llamacpp"
+	"github.com/aldehir/gpt-oss-adapter/providers/lmstudio"
+	"github.com/aldehir/gpt-oss-adapter/providers/openrouter"
+	"github.com/aldehir/gpt-oss-adapter/providers/types"
 )
 
 var version = "dev"
 
 var (
-	listen        string
-	target        string
-	verbose       bool
-	reasoningFrom string
-	reasoningTo   string
+	listen   string
+	target   string
+	verbose  bool
+	provider string
 )
 
 var rootCmd = &cobra.Command{
@@ -60,7 +64,8 @@ func startServer() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: logLevel,
 	}))
-	adapter := NewAdapter(target, cache, logger, reasoningFrom, reasoningTo)
+	providerConfig := getProviderConfig(provider)
+	adapter := NewAdapter(target, cache, logger, providerConfig)
 
 	// Wrap adapter with logging middleware
 	handler := NewLoggingMiddleware(adapter, logger)
@@ -96,8 +101,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&listen, "listen", "l", ":8005", "Address to listen on")
 	rootCmd.Flags().StringVarP(&target, "target", "t", "", "Target URL to proxy requests to (required)")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug output")
-	rootCmd.Flags().StringVar(&reasoningFrom, "reasoning-from", "reasoning_content", "Field name to use when reading reasoning from target server")
-	rootCmd.Flags().StringVar(&reasoningTo, "reasoning-to", "reasoning", "Field name to use when sending reasoning to user")
+	rootCmd.Flags().StringVarP(&provider, "provider", "p", "llama-cpp", "Backend provider (lmstudio, llama-cpp, openrouter)")
 }
 
 // LoggingMiddleware wraps an http.Handler and logs HTTP requests in Apache/nginx format
@@ -205,6 +209,20 @@ func getClientIP(r *http.Request) string {
 	}
 
 	return r.RemoteAddr
+}
+
+func getProviderConfig(provider string) types.Provider {
+	switch provider {
+	case "lmstudio":
+		return lmstudio.NewProvider()
+	case "llama-cpp":
+		return llamacpp.NewProvider()
+	case "openrouter":
+		return openrouter.NewProvider()
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unknown provider %s, defaulting to lmstudio\n", provider)
+		return lmstudio.NewProvider()
+	}
 }
 
 func main() {
