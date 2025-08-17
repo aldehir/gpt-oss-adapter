@@ -179,6 +179,14 @@ func (a *Adapter) handleChatCompletionsBlocking(w http.ResponseWriter, resp *htt
 	}
 
 	a.extractAndCacheReasoning(responseData)
+	a.transformReasoningContentToReasoning(responseData)
+
+	modifiedBody, err := json.Marshal(responseData)
+	if err != nil {
+		a.logger.Error("failed to marshal modified response", "error", err)
+		http.Error(w, "Failed to marshal modified response", http.StatusInternalServerError)
+		return
+	}
 
 	for name, values := range resp.Header {
 		for _, value := range values {
@@ -186,7 +194,30 @@ func (a *Adapter) handleChatCompletionsBlocking(w http.ResponseWriter, resp *htt
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	w.Write(body)
+	w.Write(modifiedBody)
+}
+
+func (a *Adapter) transformReasoningContentToReasoning(responseData map[string]any) {
+	choices, ok := responseData["choices"].([]any)
+	if !ok || len(choices) == 0 {
+		return
+	}
+
+	choice, ok := choices[0].(map[string]any)
+	if !ok {
+		return
+	}
+
+	message, ok := choice["message"].(map[string]any)
+	if !ok {
+		return
+	}
+
+	if reasoningContent, ok := message["reasoning_content"].(string); ok {
+		message["reasoning"] = reasoningContent
+		delete(message, "reasoning_content")
+		a.logger.Debug("transformed reasoning_content to reasoning field")
+	}
 }
 
 func (a *Adapter) injectReasoningFromCache(requestData map[string]any) {
@@ -304,8 +335,9 @@ func (a *Adapter) handleChatCompletionsStreaming(w http.ResponseWriter, resp *ht
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		modifiedLine := a.transformStreamingLine(line)
 
-		w.Write([]byte(line + "\n"))
+		w.Write([]byte(modifiedLine + "\n"))
 		flusher.Flush()
 
 		if strings.HasPrefix(line, "data: ") {
@@ -342,6 +374,50 @@ func (a *Adapter) handleChatCompletionsStreaming(w http.ResponseWriter, resp *ht
 	}
 
 	a.logger.Debug("completed streaming response processing")
+}
+
+func (a *Adapter) transformStreamingLine(line string) string {
+	if !strings.HasPrefix(line, "data: ") {
+		return line
+	}
+
+	data := strings.TrimPrefix(line, "data: ")
+	if data == "[DONE]" || data == "" {
+		return line
+	}
+
+	var eventData map[string]any
+	if err := json.Unmarshal([]byte(data), &eventData); err != nil {
+		return line
+	}
+
+	choices, ok := eventData["choices"].([]any)
+	if !ok || len(choices) == 0 {
+		return line
+	}
+
+	choice, ok := choices[0].(map[string]any)
+	if !ok {
+		return line
+	}
+
+	delta, ok := choice["delta"].(map[string]any)
+	if !ok {
+		return line
+	}
+
+	if reasoningContent, ok := delta["reasoning_content"].(string); ok {
+		delta["reasoning"] = reasoningContent
+		delete(delta, "reasoning_content")
+
+		modifiedData, err := json.Marshal(eventData)
+		if err != nil {
+			return line
+		}
+		return "data: " + string(modifiedData)
+	}
+
+	return line
 }
 
 func (a *Adapter) processStreamingDelta(eventData map[string]any, reasoningContent *strings.Builder, toolCallID *string) {
