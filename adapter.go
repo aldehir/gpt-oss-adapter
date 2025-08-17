@@ -115,6 +115,7 @@ func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	}
 
 	a.injectReasoningFromCache(requestData)
+	a.injectReasoningEffort(requestData)
 
 	modifiedRequestBody, err := json.Marshal(requestData)
 	if err != nil {
@@ -464,4 +465,83 @@ func (a *Adapter) processStreamingDelta(eventData map[string]any, reasoningConte
 			}
 		}
 	}
+}
+
+func (a *Adapter) injectReasoningEffort(requestData map[string]any) {
+	if a.Provider.ReasoningEffort == "" {
+		return
+	}
+
+	if a.Provider.ReasoningEffort == "reasoning.effort" {
+		return
+	}
+
+	reasoningEffort := a.getNestedField(requestData, "reasoning.effort")
+	if reasoningEffort == nil {
+		return
+	}
+
+	a.setNestedField(requestData, a.Provider.ReasoningEffort, reasoningEffort)
+	a.deleteNestedField(requestData, "reasoning.effort")
+	a.logger.Debug("injected reasoning effort", "field", a.Provider.ReasoningEffort, "value", reasoningEffort)
+}
+
+func (a *Adapter) getNestedField(data map[string]any, path string) any {
+	parts := strings.Split(path, ".")
+	current := data
+
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			return current[part]
+		}
+
+		if next, ok := current[part].(map[string]any); ok {
+			current = next
+		} else {
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func (a *Adapter) setNestedField(data map[string]any, path string, value any) {
+	parts := strings.Split(path, ".")
+	current := data
+
+	for i, part := range parts {
+		if i == len(parts)-1 {
+			current[part] = value
+			return
+		}
+
+		if _, exists := current[part]; !exists {
+			current[part] = make(map[string]any)
+		}
+
+		if next, ok := current[part].(map[string]any); ok {
+			current = next
+		} else {
+			return
+		}
+	}
+}
+
+func (a *Adapter) deleteNestedField(data map[string]any, path string) {
+	parts := strings.Split(path, ".")
+	if len(parts) == 1 {
+		delete(data, parts[0])
+		return
+	}
+
+	current := data
+	for _, part := range parts[:len(parts)-1] {
+		if next, ok := current[part].(map[string]any); ok {
+			current = next
+		} else {
+			return
+		}
+	}
+
+	delete(current, parts[len(parts)-1])
 }

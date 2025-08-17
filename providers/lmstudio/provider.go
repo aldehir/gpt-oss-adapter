@@ -6,6 +6,6 @@ func NewProvider() types.Provider {
 	return types.Provider{
 		Name:            "lmstudio",
 		Reasoning:       "reasoning",
-		ReasoningEffort: "reasoning.effort",
+		ReasoningEffort: "reasoning_effort",
 	}
 }
