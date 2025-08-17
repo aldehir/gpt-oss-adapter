@@ -1,22 +1,21 @@
 # GPT-OSS Adapter
 
-This adapter acts as a middleware layer for GPT-OSS models to manage
-chain-of-thought (CoT) reasoning between client applications and
-inference servers.
+A middleware proxy that manages chain-of-thought reasoning for GPT-OSS models.
 
 ## Overview
 
-GPT-OSS models require chain-of-thought (CoT) reasoning from prior tool calls
-to maximize their effectiveness. However, not many clients send this back in
-their requests. This project solves that by:
+This adapter sits between client applications and inference servers to manage
+chain-of-thought reasoning for GPT-OSS models. GPT-OSS models work better when
+they receive reasoning context from prior tool calls, but most clients don't
+include this context in subsequent requests. It handles this by:
 
-- **Field Translation**: Automatically translates reasoning fields between
-  different formats to ensure compatibility with various client tools
+- **Field Translation**: Translates reasoning fields between different formats
+  for compatibility with various client tools
 
 - **Caching**: Stores reasoning content from tool call responses and
-  automatically injects it into subsequent requests when needed
+  automatically injects it into subsequent requests
 
-- **Reverse Proxying**: Stands between clients and llama-server/llama-swap to
+- **Reverse Proxying**: Sits between clients and llama-server/llama-swap to
   manage reasoning content
 
 ## Installation
@@ -53,12 +52,14 @@ gpt-oss-adapter \
   --verbose
 ```
 
-The adapter supports the following OpenAI-compatible endpoints:
+### Supported Endpoints
+
+The adapter handles these OpenAI-compatible endpoints:
 
 - `/v1/chat/completions`
 - `/chat/completions`
 
-All other endpoints are proxied directly to the target server without modification.
+Other endpoints pass through unchanged.
 
 ## License
 
