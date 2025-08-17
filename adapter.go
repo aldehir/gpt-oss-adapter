@@ -7,10 +7,16 @@ import (
 	"strings"
 )
 
+type Cache interface {
+	Put(key string, item ReasoningItem)
+	Get(key string) (ReasoningItem, bool)
+}
+
 type Adapter struct {
 	Target string
 	mux    *http.ServeMux
 	client *http.Client
+	cache  Cache
 }
 
 func (a *Adapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -121,12 +127,13 @@ func (a *Adapter) handleChatCompletionsStreaming(w http.ResponseWriter, resp *ht
 	io.Copy(w, resp.Body)
 }
 
-func NewAdapter(target string) *Adapter {
+func NewAdapter(target string, cache Cache) *Adapter {
 	mux := http.NewServeMux()
 	adapter := &Adapter{
 		Target: target,
 		mux:    mux,
 		client: &http.Client{},
+		cache:  cache,
 	}
 
 	mux.HandleFunc("/", adapter.handleDefault)
