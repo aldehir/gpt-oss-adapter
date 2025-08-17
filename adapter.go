@@ -56,7 +56,7 @@ func (a *Adapter) handleDefault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetURL.Path = r.URL.Path
+	targetURL.Path = strings.TrimSuffix(targetURL.Path, "/") + r.URL.Path
 	targetURL.RawQuery = r.URL.RawQuery
 
 	req, err := http.NewRequest(r.Method, targetURL.String(), r.Body)
@@ -70,6 +70,8 @@ func (a *Adapter) handleDefault(w http.ResponseWriter, r *http.Request) {
 			req.Header.Add(name, value)
 		}
 	}
+
+	req.Header.Del("Accept-Encoding")
 
 	if req.Header.Get("X-Forwarded-For") == "" {
 		if clientIP := getClientIP(r); clientIP != "" {
@@ -131,7 +133,7 @@ func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	targetURL.Path = r.URL.Path
+	targetURL.Path = strings.TrimSuffix(targetURL.Path, "/") + r.URL.Path
 	targetURL.RawQuery = r.URL.RawQuery
 
 	a.logger.Debug("proxying request to target", "target", targetURL.String())
@@ -148,6 +150,8 @@ func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 			req.Header.Add(name, value)
 		}
 	}
+
+	req.Header.Del("Accept-Encoding")
 
 	if req.Header.Get("X-Forwarded-For") == "" {
 		if clientIP := getClientIP(r); clientIP != "" {

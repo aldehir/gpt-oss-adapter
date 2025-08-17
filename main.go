@@ -14,7 +14,6 @@ import (
 
 	"github.com/aldehir/gpt-oss-adapter/providers/llamacpp"
 	"github.com/aldehir/gpt-oss-adapter/providers/lmstudio"
-	"github.com/aldehir/gpt-oss-adapter/providers/openrouter"
 	"github.com/aldehir/gpt-oss-adapter/providers/types"
 )
 
@@ -101,7 +100,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&listen, "listen", "l", ":8005", "Address to listen on")
 	rootCmd.Flags().StringVarP(&target, "target", "t", "", "Target URL to proxy requests to (required)")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug output")
-	rootCmd.Flags().StringVarP(&provider, "provider", "p", "llama-cpp", "Backend provider (lmstudio, llama-cpp, openrouter)")
+	rootCmd.Flags().StringVarP(&provider, "provider", "p", "llama-cpp", "Backend provider (lmstudio, llama-cpp)")
 }
 
 // LoggingMiddleware wraps an http.Handler and logs HTTP requests in Apache/nginx format
@@ -217,8 +216,6 @@ func getProviderConfig(provider string) types.Provider {
 		return lmstudio.NewProvider()
 	case "llama-cpp":
 		return llamacpp.NewProvider()
-	case "openrouter":
-		return openrouter.NewProvider()
 	default:
 		fmt.Fprintf(os.Stderr, "Error: unknown provider %s, defaulting to lmstudio\n", provider)
 		return lmstudio.NewProvider()
