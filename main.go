@@ -20,11 +20,13 @@ var rootCmd = &cobra.Command{
 		listen, _ := cmd.Flags().GetString("listen")
 		target, _ := cmd.Flags().GetString("target")
 		verbose, _ := cmd.Flags().GetBool("verbose")
+		reasoningFrom, _ := cmd.Flags().GetString("reasoning-from")
+		reasoningTo, _ := cmd.Flags().GetString("reasoning-to")
 		if target == "" {
 			fmt.Fprintf(os.Stderr, "Error: target argument is required\n")
 			os.Exit(1)
 		}
-		startServer(listen, target, verbose)
+		startServer(listen, target, verbose, reasoningFrom, reasoningTo)
 	},
 }
 
@@ -35,7 +37,7 @@ func Execute() {
 	}
 }
 
-func startServer(addr, target string, verbose bool) {
+func startServer(addr, target string, verbose bool, reasoningFrom, reasoningTo string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -51,7 +53,7 @@ func startServer(addr, target string, verbose bool) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: logLevel,
 	}))
-	adapter := NewAdapter(target, cache, logger)
+	adapter := NewAdapter(target, cache, logger, reasoningFrom, reasoningTo)
 	server := &http.Server{
 		Addr:    addr,
 		Handler: adapter,
@@ -83,6 +85,8 @@ func init() {
 	rootCmd.Flags().StringP("listen", "l", ":8005", "Address to listen on")
 	rootCmd.Flags().StringP("target", "t", "", "Target URL to proxy requests to (required)")
 	rootCmd.Flags().BoolP("verbose", "v", false, "Enable debug output")
+	rootCmd.Flags().String("reasoning-from", "reasoning_content", "Field name to use when reading reasoning from target server")
+	rootCmd.Flags().String("reasoning-to", "reasoning", "Field name to use when sending reasoning to user")
 }
 
 func main() {

@@ -17,21 +17,25 @@ type Cache interface {
 }
 
 type Adapter struct {
-	Target string
-	mux    *http.ServeMux
-	client *http.Client
-	cache  Cache
-	logger *slog.Logger
+	Target        string
+	ReasoningFrom string
+	ReasoningTo   string
+	mux           *http.ServeMux
+	client        *http.Client
+	cache         Cache
+	logger        *slog.Logger
 }
 
-func NewAdapter(target string, cache Cache, logger *slog.Logger) *Adapter {
+func NewAdapter(target string, cache Cache, logger *slog.Logger, reasoningFrom, reasoningTo string) *Adapter {
 	mux := http.NewServeMux()
 	adapter := &Adapter{
-		Target: target,
-		mux:    mux,
-		client: &http.Client{},
-		cache:  cache,
-		logger: logger,
+		Target:        target,
+		ReasoningFrom: reasoningFrom,
+		ReasoningTo:   reasoningTo,
+		mux:           mux,
+		client:        &http.Client{},
+		cache:         cache,
+		logger:        logger,
 	}
 
 	mux.HandleFunc("/v1/chat/completions", adapter.handleChatCompletions)
@@ -211,10 +215,10 @@ func (a *Adapter) transformReasoningContentToReasoning(responseData map[string]a
 		return
 	}
 
-	if reasoningContent, ok := message["reasoning_content"].(string); ok {
-		message["reasoning"] = reasoningContent
-		delete(message, "reasoning_content")
-		a.logger.Debug("transformed reasoning_content to reasoning field")
+	if reasoningContent, ok := message[a.ReasoningFrom].(string); ok {
+		message[a.ReasoningTo] = reasoningContent
+		delete(message, a.ReasoningFrom)
+		a.logger.Debug("transformed reasoning field", "from", a.ReasoningFrom, "to", a.ReasoningTo)
 	}
 }
 
@@ -253,9 +257,9 @@ func (a *Adapter) injectReasoningFromCache(requestData map[string]any) {
 			}
 
 			if item, found := a.cache.Get(id); found {
-				message["reasoning_content"] = item.Content
+				message[a.ReasoningFrom] = item.Content
 				injectedCount++
-				a.logger.Debug("injected reasoning content from cache", "tool_call_id", id)
+				a.logger.Debug("injected reasoning content from cache", "tool_call_id", id, "field", a.ReasoningFrom)
 				break
 			}
 		}
@@ -287,7 +291,7 @@ func (a *Adapter) extractAndCacheReasoning(responseData map[string]any) {
 		return
 	}
 
-	reasoningContent, ok := message["reasoning_content"].(string)
+	reasoningContent, ok := message[a.ReasoningFrom].(string)
 	if !ok {
 		return
 	}
@@ -407,9 +411,9 @@ func (a *Adapter) transformStreamingLine(line string) string {
 		return line
 	}
 
-	if reasoningContent, ok := delta["reasoning_content"].(string); ok {
-		delta["reasoning"] = reasoningContent
-		delete(delta, "reasoning_content")
+	if reasoningContent, ok := delta[a.ReasoningFrom].(string); ok {
+		delta[a.ReasoningTo] = reasoningContent
+		delete(delta, a.ReasoningFrom)
 
 		modifiedData, err := json.Marshal(eventData)
 		if err != nil {
@@ -437,7 +441,7 @@ func (a *Adapter) processStreamingDelta(eventData map[string]any, reasoningConte
 		return
 	}
 
-	if reasoningDelta, ok := delta["reasoning_content"].(string); ok {
+	if reasoningDelta, ok := delta[a.ReasoningFrom].(string); ok {
 		reasoningContent.WriteString(reasoningDelta)
 	}
 
