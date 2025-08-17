@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,11 +14,16 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "gpt-oss-adapter",
-	Short: "A CLI application built with Cobra",
-	Long:  "A longer description of your CLI application and what it does.",
+	Short: "gpt-oss adapter to inject reasoning from tool calls",
+	Long:  "gpt-oss adapter to inject reasoning from tool calls",
 	Run: func(cmd *cobra.Command, args []string) {
 		listen, _ := cmd.Flags().GetString("listen")
-		startServer(listen)
+		target, _ := cmd.Flags().GetString("target")
+		if target == "" {
+			fmt.Fprintf(os.Stderr, "Error: target argument is required\n")
+			os.Exit(1)
+		}
+		startServer(listen, target)
 	},
 }
 
@@ -29,38 +34,43 @@ func Execute() {
 	}
 }
 
-func startServer(addr string) {
+func startServer(addr, target string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	adapter := NewAdapter()
+	cache := NewLRUCache(1000)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	adapter := NewAdapter(target, cache, logger)
 	server := &http.Server{
 		Addr:    addr,
 		Handler: adapter,
 	}
 
 	go func() {
-		log.Printf("Starting server on %s", addr)
+		logger.Info("Starting server", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			logger.Error("Server failed to start", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("Shutting down server...")
+	logger.Info("Shutting down server")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		logger.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server exited")
+	logger.Info("Server exited")
 }
 
 func init() {
-	rootCmd.Flags().StringP("listen", "l", ":8080", "Address to listen on")
+	rootCmd.Flags().StringP("listen", "l", ":8005", "Address to listen on")
+	rootCmd.Flags().StringP("target", "t", "", "Target URL to proxy requests to (required)")
 }
 
 func main() {

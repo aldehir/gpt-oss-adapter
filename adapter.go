@@ -24,6 +24,23 @@ type Adapter struct {
 	logger *slog.Logger
 }
 
+func NewAdapter(target string, cache Cache, logger *slog.Logger) *Adapter {
+	mux := http.NewServeMux()
+	adapter := &Adapter{
+		Target: target,
+		mux:    mux,
+		client: &http.Client{},
+		cache:  cache,
+		logger: logger,
+	}
+
+	mux.HandleFunc("/v1/chat/completions", adapter.handleChatCompletions)
+	mux.HandleFunc("/chat/completions", adapter.handleChatCompletions)
+	mux.HandleFunc("/", adapter.handleDefault)
+
+	return adapter
+}
+
 func (a *Adapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.mux.ServeHTTP(w, r)
 }
@@ -354,19 +371,4 @@ func (a *Adapter) processStreamingDelta(eventData map[string]any, reasoningConte
 			}
 		}
 	}
-}
-
-func NewAdapter(target string, cache Cache, logger *slog.Logger) *Adapter {
-	mux := http.NewServeMux()
-	adapter := &Adapter{
-		Target: target,
-		mux:    mux,
-		client: &http.Client{},
-		cache:  cache,
-		logger: logger,
-	}
-
-	mux.HandleFunc("/", adapter.handleDefault)
-
-	return adapter
 }
