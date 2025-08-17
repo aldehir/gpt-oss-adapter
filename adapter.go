@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -244,7 +245,81 @@ func (a *Adapter) handleChatCompletionsStreaming(w http.ResponseWriter, resp *ht
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		io.Copy(w, resp.Body)
+		return
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	var reasoningContent strings.Builder
+	var toolCallID string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		w.Write([]byte(line + "\n"))
+		flusher.Flush()
+
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				if reasoningContent.Len() > 0 && toolCallID != "" {
+					item := ReasoningItem{
+						ID:      toolCallID,
+						Content: reasoningContent.String(),
+					}
+					a.cache.Put(toolCallID, item)
+				}
+				continue
+			}
+
+			var eventData map[string]any
+			if err := json.Unmarshal([]byte(data), &eventData); err != nil {
+				continue
+			}
+
+			a.processStreamingDelta(eventData, &reasoningContent, &toolCallID)
+		}
+	}
+
+	if reasoningContent.Len() > 0 && toolCallID != "" {
+		item := ReasoningItem{
+			ID:      toolCallID,
+			Content: reasoningContent.String(),
+		}
+		a.cache.Put(toolCallID, item)
+	}
+}
+
+func (a *Adapter) processStreamingDelta(eventData map[string]any, reasoningContent *strings.Builder, toolCallID *string) {
+	choices, ok := eventData["choices"].([]any)
+	if !ok || len(choices) == 0 {
+		return
+	}
+
+	choice, ok := choices[0].(map[string]any)
+	if !ok {
+		return
+	}
+
+	delta, ok := choice["delta"].(map[string]any)
+	if !ok {
+		return
+	}
+
+	if reasoningDelta, ok := delta["reasoning_content"].(string); ok {
+		reasoningContent.WriteString(reasoningDelta)
+	}
+
+	if toolCalls, ok := delta["tool_calls"].([]any); ok && len(toolCalls) > 0 {
+		if toolCall, ok := toolCalls[0].(map[string]any); ok {
+			if id, ok := toolCall["id"].(string); ok {
+				*toolCallID = id
+			}
+		}
+	}
 }
 
 func NewAdapter(target string, cache Cache) *Adapter {
