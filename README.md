@@ -12,10 +12,16 @@ include this context in subsequent requests. It handles this by:
 - **Field Translation**: Translates reasoning fields between different formats
   for compatibility with various client tools
 
+- **Provider Support**: Automatically maps fields based on the target provider
+  (LM Studio, OpenRouter, llama.cpp)
+
+- **Reasoning Effort**: Extracts `reasoning.effort` from requests and maps it
+  to the appropriate provider field
+
 - **Caching**: Stores reasoning content from tool call responses and
   automatically injects it into subsequent requests
 
-- **Reverse Proxying**: Sits between clients and llama-server/llama-swap to
+- **Reverse Proxying**: Sits between clients and inference servers to
   manage reasoning content
 
 ## Installation
@@ -37,18 +43,56 @@ gpt-oss-adapter --target http://localhost:8080 --listen :8005
 - `--target, -t`: Target server URL (required)
 - `--listen, -l`: Server listen address (default: `:8005`)
 - `--verbose, -v`: Enable debug logging
-- `--reasoning-from`: Source field name for reasoning content (default: `reasoning_content`)
-- `--reasoning-to`: Target field name for reasoning content (default: `reasoning`)
+- `--provider, -p`: Target provider type (lmstudio, openrouter, llamacpp)
 
-### Example
+## Provider Support
+
+The adapter automatically handles field mapping based on the target provider:
+
+### LM Studio (`lmstudio`)
+- **Reasoning field**: `reasoning`
+- **Reasoning effort**: `reasoning_effort`
+
+### OpenRouter (`openrouter`)
+- **Reasoning field**: `reasoning`
+- **Reasoning effort**: `reasoning.effort`
+
+### llama.cpp (`llamacpp`)
+- **Reasoning field**: `reasoning_content`
+- **Reasoning effort**: `chat_template_kwargs.reasoning_effort`
+
+## Reasoning Effort Support
+
+The adapter automatically extracts `reasoning.effort` from client requests and
+maps it to the appropriate provider field:
+
+- **Input**: `{"reasoning": {"effort": "high"}}`
+- **OpenRouter**: Unchanged
+- **LM Studio**: Maps to `reasoning_effort`
+- **llama.cpp**: Maps to `chat_template_kwargs.reasoning_effort`
+
+### Examples
 
 ```bash
-# Proxy requests to llama-server with custom reasoning field mapping
+# Proxy requests to LM Studio
+gpt-oss-adapter \
+  --target http://localhost:1234 \
+  --listen :8005 \
+  --provider lmstudio \
+  --verbose
+
+# Proxy requests to llama.cpp server
 gpt-oss-adapter \
   --target http://localhost:8000 \
   --listen :8005 \
-  --reasoning-from reasoning_content \
-  --reasoning-to reasoning \
+  --provider llamacpp \
+  --verbose
+
+# Proxy requests to OpenRouter
+gpt-oss-adapter \
+  --target https://openrouter.ai/api \
+  --listen :8005 \
+  --provider openrouter \
   --verbose
 ```
 
