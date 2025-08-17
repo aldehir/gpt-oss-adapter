@@ -12,21 +12,24 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	listen        string
+	target        string
+	verbose       bool
+	reasoningFrom string
+	reasoningTo   string
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "gpt-oss-adapter",
 	Short: "gpt-oss adapter to inject reasoning from tool calls",
 	Long:  "gpt-oss adapter to inject reasoning from tool calls",
 	Run: func(cmd *cobra.Command, args []string) {
-		listen, _ := cmd.Flags().GetString("listen")
-		target, _ := cmd.Flags().GetString("target")
-		verbose, _ := cmd.Flags().GetBool("verbose")
-		reasoningFrom, _ := cmd.Flags().GetString("reasoning-from")
-		reasoningTo, _ := cmd.Flags().GetString("reasoning-to")
 		if target == "" {
 			fmt.Fprintf(os.Stderr, "Error: target argument is required\n")
 			os.Exit(1)
 		}
-		startServer(listen, target, verbose, reasoningFrom, reasoningTo)
+		startServer()
 	},
 }
 
@@ -37,7 +40,7 @@ func Execute() {
 	}
 }
 
-func startServer(addr, target string, verbose bool, reasoningFrom, reasoningTo string) {
+func startServer() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -55,12 +58,12 @@ func startServer(addr, target string, verbose bool, reasoningFrom, reasoningTo s
 	}))
 	adapter := NewAdapter(target, cache, logger, reasoningFrom, reasoningTo)
 	server := &http.Server{
-		Addr:    addr,
+		Addr:    listen,
 		Handler: adapter,
 	}
 
 	go func() {
-		logger.Info("Starting server", "addr", addr)
+		logger.Info("Starting server", "addr", listen)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("Server failed to start", "error", err)
 			os.Exit(1)
@@ -82,11 +85,11 @@ func startServer(addr, target string, verbose bool, reasoningFrom, reasoningTo s
 }
 
 func init() {
-	rootCmd.Flags().StringP("listen", "l", ":8005", "Address to listen on")
-	rootCmd.Flags().StringP("target", "t", "", "Target URL to proxy requests to (required)")
-	rootCmd.Flags().BoolP("verbose", "v", false, "Enable debug output")
-	rootCmd.Flags().String("reasoning-from", "reasoning_content", "Field name to use when reading reasoning from target server")
-	rootCmd.Flags().String("reasoning-to", "reasoning", "Field name to use when sending reasoning to user")
+	rootCmd.Flags().StringVarP(&listen, "listen", "l", ":8005", "Address to listen on")
+	rootCmd.Flags().StringVarP(&target, "target", "t", "", "Target URL to proxy requests to (required)")
+	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug output")
+	rootCmd.Flags().StringVar(&reasoningFrom, "reasoning-from", "reasoning_content", "Field name to use when reading reasoning from target server")
+	rootCmd.Flags().StringVar(&reasoningTo, "reasoning-to", "reasoning", "Field name to use when sending reasoning to user")
 }
 
 func main() {
