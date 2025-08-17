@@ -37,7 +37,7 @@ gpt-oss-adapter --target http://localhost:8080 --listen :8005
 - `--target, -t`: Target server URL (required)
 - `--listen, -l`: Server listen address (default: `:8005`)
 - `--verbose, -v`: Enable debug logging
-- `--provider, -p`: Target provider type (lmstudio, llamacpp)
+- `--provider, -p`: Target provider type (lmstudio, llama-cpp)
 
 ## Provider Support
 
