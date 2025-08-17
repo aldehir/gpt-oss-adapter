@@ -9,9 +9,6 @@ chain-of-thought reasoning for GPT-OSS models. GPT-OSS models work better when
 they receive reasoning context from prior tool calls, but most clients don't
 include this context in subsequent requests. It handles this by:
 
-- **Field Translation**: Translates reasoning fields between different formats
-  for compatibility with various client tools
-
 - **Provider Support**: Automatically maps fields based on the target provider
   (LM Studio, llama.cpp)
 
