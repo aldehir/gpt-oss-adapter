@@ -34,7 +34,7 @@ jobs:
           - goos: windows
             goarch: amd64
             artifact_name: gpt-oss-adapter-windows-amd64.exe
-            asset_name: gpt-oss-adapter-windows-amd64.exe
+            asset_name: gpt-oss-adapter-windows-amd64
 
     steps:
     - uses: actions/checkout@v4
@@ -51,6 +51,7 @@ jobs:
       env:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
       run: |
         VERSION=${GITHUB_REF_NAME#v}
         if [[ "$GITHUB_REF" != refs/tags/* ]]; then
