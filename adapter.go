@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -20,6 +21,7 @@ type Adapter struct {
 	mux    *http.ServeMux
 	client *http.Client
 	cache  Cache
+	logger *slog.Logger
 }
 
 func (a *Adapter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -66,14 +68,18 @@ func (a *Adapter) handleDefault(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
+	a.logger.Info("handling chat completions request", "method", r.Method, "path", r.URL.Path)
+
 	requestBody, err := io.ReadAll(r.Body)
 	if err != nil {
+		a.logger.Error("failed to read request body", "error", err)
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
 		return
 	}
 
 	var requestData map[string]any
 	if err := json.Unmarshal(requestBody, &requestData); err != nil {
+		a.logger.Error("failed to unmarshal request", "error", err)
 		http.Error(w, "Failed to unmarshal request", http.StatusInternalServerError)
 		return
 	}
@@ -82,12 +88,14 @@ func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 
 	modifiedRequestBody, err := json.Marshal(requestData)
 	if err != nil {
+		a.logger.Error("failed to marshal modified request", "error", err)
 		http.Error(w, "Failed to marshal modified request", http.StatusInternalServerError)
 		return
 	}
 
 	targetURL, err := url.Parse(a.Target)
 	if err != nil {
+		a.logger.Error("invalid target URL", "target", a.Target, "error", err)
 		http.Error(w, "Invalid target URL", http.StatusInternalServerError)
 		return
 	}
@@ -95,8 +103,11 @@ func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	targetURL.Path = r.URL.Path
 	targetURL.RawQuery = r.URL.RawQuery
 
+	a.logger.Debug("proxying request to target", "target", targetURL.String())
+
 	req, err := http.NewRequest(r.Method, targetURL.String(), bytes.NewReader(modifiedRequestBody))
 	if err != nil {
+		a.logger.Error("failed to create request", "error", err)
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
 		return
 	}
@@ -109,15 +120,20 @@ func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 
 	resp, err := a.client.Do(req)
 	if err != nil {
+		a.logger.Error("failed to proxy request", "error", err)
 		http.Error(w, "Failed to proxy request", http.StatusBadGateway)
 		return
 	}
 	defer resp.Body.Close()
 
 	contentType := resp.Header.Get("Content-Type")
+	a.logger.Debug("received response", "status", resp.StatusCode, "content-type", contentType)
+
 	if strings.Contains(contentType, "application/json") {
+		a.logger.Debug("handling blocking response")
 		a.handleChatCompletionsBlocking(w, resp)
 	} else if strings.Contains(contentType, "text/event-stream") {
+		a.logger.Debug("handling streaming response")
 		a.handleChatCompletionsStreaming(w, resp)
 	} else {
 		for name, values := range resp.Header {
@@ -133,12 +149,14 @@ func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 func (a *Adapter) handleChatCompletionsBlocking(w http.ResponseWriter, resp *http.Response) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		a.logger.Error("failed to read response body", "error", err)
 		http.Error(w, "Failed to read response body", http.StatusInternalServerError)
 		return
 	}
 
 	var responseData map[string]any
 	if err := json.Unmarshal(body, &responseData); err != nil {
+		a.logger.Error("failed to unmarshal response", "error", err)
 		http.Error(w, "Failed to unmarshal response", http.StatusInternalServerError)
 		return
 	}
@@ -160,6 +178,7 @@ func (a *Adapter) injectReasoningFromCache(requestData map[string]any) {
 		return
 	}
 
+	injectedCount := 0
 	for _, msg := range messages {
 		message, ok := msg.(map[string]any)
 		if !ok {
@@ -189,9 +208,15 @@ func (a *Adapter) injectReasoningFromCache(requestData map[string]any) {
 
 			if item, found := a.cache.Get(id); found {
 				message["reasoning_content"] = item.Content
+				injectedCount++
+				a.logger.Debug("injected reasoning content from cache", "tool_call_id", id)
 				break
 			}
 		}
+	}
+
+	if injectedCount > 0 {
+		a.logger.Info("injected reasoning content", "count", injectedCount)
 	}
 }
 
@@ -236,9 +261,12 @@ func (a *Adapter) extractAndCacheReasoning(responseData map[string]any) {
 		Content: reasoningContent,
 	}
 	a.cache.Put(id, item)
+	a.logger.Info("cached reasoning content", "tool_call_id", id, "content_length", len(reasoningContent))
 }
 
 func (a *Adapter) handleChatCompletionsStreaming(w http.ResponseWriter, resp *http.Response) {
+	a.logger.Debug("starting streaming response processing")
+
 	for name, values := range resp.Header {
 		for _, value := range values {
 			w.Header().Add(name, value)
@@ -248,6 +276,7 @@ func (a *Adapter) handleChatCompletionsStreaming(w http.ResponseWriter, resp *ht
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		a.logger.Warn("response writer does not support flushing, falling back to simple copy")
 		io.Copy(w, resp.Body)
 		return
 	}
@@ -265,12 +294,14 @@ func (a *Adapter) handleChatCompletionsStreaming(w http.ResponseWriter, resp *ht
 		if strings.HasPrefix(line, "data: ") {
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
+				a.logger.Debug("received [DONE] event, finalizing stream")
 				if reasoningContent.Len() > 0 && toolCallID != "" {
 					item := ReasoningItem{
 						ID:      toolCallID,
 						Content: reasoningContent.String(),
 					}
 					a.cache.Put(toolCallID, item)
+					a.logger.Info("cached reasoning content from stream", "tool_call_id", toolCallID, "content_length", reasoningContent.Len())
 				}
 				continue
 			}
@@ -290,7 +321,10 @@ func (a *Adapter) handleChatCompletionsStreaming(w http.ResponseWriter, resp *ht
 			Content: reasoningContent.String(),
 		}
 		a.cache.Put(toolCallID, item)
+		a.logger.Info("cached reasoning content from stream end", "tool_call_id", toolCallID, "content_length", reasoningContent.Len())
 	}
+
+	a.logger.Debug("completed streaming response processing")
 }
 
 func (a *Adapter) processStreamingDelta(eventData map[string]any, reasoningContent *strings.Builder, toolCallID *string) {
@@ -322,13 +356,14 @@ func (a *Adapter) processStreamingDelta(eventData map[string]any, reasoningConte
 	}
 }
 
-func NewAdapter(target string, cache Cache) *Adapter {
+func NewAdapter(target string, cache Cache, logger *slog.Logger) *Adapter {
 	mux := http.NewServeMux()
 	adapter := &Adapter{
 		Target: target,
 		mux:    mux,
 		client: &http.Client{},
 		cache:  cache,
+		logger: logger,
 	}
 
 	mux.HandleFunc("/", adapter.handleDefault)
