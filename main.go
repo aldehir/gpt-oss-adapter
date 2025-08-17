@@ -19,11 +19,12 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		listen, _ := cmd.Flags().GetString("listen")
 		target, _ := cmd.Flags().GetString("target")
+		verbose, _ := cmd.Flags().GetBool("verbose")
 		if target == "" {
 			fmt.Fprintf(os.Stderr, "Error: target argument is required\n")
 			os.Exit(1)
 		}
-		startServer(listen, target)
+		startServer(listen, target, verbose)
 	},
 }
 
@@ -34,12 +35,22 @@ func Execute() {
 	}
 }
 
-func startServer(addr, target string) {
+func startServer(addr, target string, verbose bool) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	cache := NewLRUCache(1000)
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	var logLevel slog.Level
+	if verbose {
+		logLevel = slog.LevelDebug
+	} else {
+		logLevel = slog.LevelInfo
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
 	adapter := NewAdapter(target, cache, logger)
 	server := &http.Server{
 		Addr:    addr,
@@ -71,6 +82,7 @@ func startServer(addr, target string) {
 func init() {
 	rootCmd.Flags().StringP("listen", "l", ":8005", "Address to listen on")
 	rootCmd.Flags().StringP("target", "t", "", "Target URL to proxy requests to (required)")
+	rootCmd.Flags().BoolP("verbose", "v", false, "Enable debug output")
 }
 
 func main() {

@@ -75,6 +75,9 @@ func (a *Adapter) handleDefault(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	for name, values := range resp.Header {
+		if name == "Content-Length" {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(name, value)
 		}
@@ -146,20 +149,12 @@ func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	contentType := resp.Header.Get("Content-Type")
 	a.logger.Debug("received response", "status", resp.StatusCode, "content-type", contentType)
 
-	if strings.Contains(contentType, "application/json") {
-		a.logger.Debug("handling blocking response")
-		a.handleChatCompletionsBlocking(w, resp)
-	} else if strings.Contains(contentType, "text/event-stream") {
+	if strings.Contains(contentType, "text/event-stream") {
 		a.logger.Debug("handling streaming response")
 		a.handleChatCompletionsStreaming(w, resp)
 	} else {
-		for name, values := range resp.Header {
-			for _, value := range values {
-				w.Header().Add(name, value)
-			}
-		}
-		w.WriteHeader(resp.StatusCode)
-		io.Copy(w, resp.Body)
+		a.logger.Debug("handling blocking response")
+		a.handleChatCompletionsBlocking(w, resp)
 	}
 }
 
@@ -189,6 +184,9 @@ func (a *Adapter) handleChatCompletionsBlocking(w http.ResponseWriter, resp *htt
 	}
 
 	for name, values := range resp.Header {
+		if name == "Content-Length" {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(name, value)
 		}
@@ -316,6 +314,9 @@ func (a *Adapter) handleChatCompletionsStreaming(w http.ResponseWriter, resp *ht
 	a.logger.Debug("starting streaming response processing")
 
 	for name, values := range resp.Header {
+		if name == "Content-Length" {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(name, value)
 		}
