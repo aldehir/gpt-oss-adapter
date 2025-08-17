@@ -12,6 +12,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var version = "dev"
+
 var (
 	listen        string
 	target        string
@@ -21,9 +23,10 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "gpt-oss-adapter",
-	Short: "gpt-oss adapter to inject reasoning from tool calls",
-	Long:  "gpt-oss adapter to inject reasoning from tool calls",
+	Use:     "gpt-oss-adapter",
+	Short:   "gpt-oss adapter to inject reasoning from tool calls",
+	Long:    "gpt-oss adapter to inject reasoning from tool calls",
+	Version: version,
 	Run: func(cmd *cobra.Command, args []string) {
 		if target == "" {
 			fmt.Fprintf(os.Stderr, "Error: target argument is required\n")
