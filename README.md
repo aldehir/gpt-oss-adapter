@@ -13,7 +13,7 @@ include this context in subsequent requests. It handles this by:
   for compatibility with various client tools
 
 - **Provider Support**: Automatically maps fields based on the target provider
-  (LM Studio, OpenRouter, llama.cpp)
+  (LM Studio, llama.cpp)
 
 - **Reasoning Effort**: Extracts `reasoning.effort` from requests and maps it
   to the appropriate provider field
@@ -43,7 +43,7 @@ gpt-oss-adapter --target http://localhost:8080 --listen :8005
 - `--target, -t`: Target server URL (required)
 - `--listen, -l`: Server listen address (default: `:8005`)
 - `--verbose, -v`: Enable debug logging
-- `--provider, -p`: Target provider type (lmstudio, openrouter, llamacpp)
+- `--provider, -p`: Target provider type (lmstudio, llamacpp)
 
 ## Provider Support
 
@@ -52,10 +52,6 @@ The adapter automatically handles field mapping based on the target provider:
 ### LM Studio (`lmstudio`)
 - **Reasoning field**: `reasoning`
 - **Reasoning effort**: `reasoning_effort`
-
-### OpenRouter (`openrouter`)
-- **Reasoning field**: `reasoning`
-- **Reasoning effort**: `reasoning.effort`
 
 ### llama.cpp (`llamacpp`)
 - **Reasoning field**: `reasoning_content`
@@ -67,7 +63,6 @@ The adapter automatically extracts `reasoning.effort` from client requests and
 maps it to the appropriate provider field:
 
 - **Input**: `{"reasoning": {"effort": "high"}}`
-- **OpenRouter**: Unchanged
 - **LM Studio**: Maps to `reasoning_effort`
 - **llama.cpp**: Maps to `chat_template_kwargs.reasoning_effort`
 
@@ -86,13 +81,6 @@ gpt-oss-adapter \
   --target http://localhost:8000 \
   --listen :8005 \
   --provider llamacpp \
-  --verbose
-
-# Proxy requests to OpenRouter
-gpt-oss-adapter \
-  --target https://openrouter.ai/api \
-  --listen :8005 \
-  --provider openrouter \
   --verbose
 ```
 
