@@ -9,7 +9,7 @@ chain-of-thought reasoning for GPT-OSS models. GPT-OSS models work better when
 they receive reasoning context from prior tool calls, but most clients don't
 include this context in subsequent requests. It handles this by:
 
-- **Provider Support**: Automatically maps fields based on the target provider
+- **Field Mapping**: Automatically maps fields based on the target provider
   (LM Studio, llama.cpp)
 
 - **Caching**: Stores reasoning content from tool call responses and
