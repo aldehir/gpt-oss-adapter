@@ -71,6 +71,12 @@ func (a *Adapter) handleDefault(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.Header.Get("X-Forwarded-For") == "" {
+		if clientIP := getClientIP(r); clientIP != "" {
+			req.Header.Set("X-Forwarded-For", clientIP)
+		}
+	}
+
 	resp, err := a.client.Do(req)
 	if err != nil {
 		http.Error(w, "Failed to proxy request", http.StatusBadGateway)
@@ -139,6 +145,12 @@ func (a *Adapter) handleChatCompletions(w http.ResponseWriter, r *http.Request) 
 	for name, values := range r.Header {
 		for _, value := range values {
 			req.Header.Add(name, value)
+		}
+	}
+
+	if req.Header.Get("X-Forwarded-For") == "" {
+		if clientIP := getClientIP(r); clientIP != "" {
+			req.Header.Set("X-Forwarded-For", clientIP)
 		}
 	}
 
