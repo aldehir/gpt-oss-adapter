@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -60,9 +61,13 @@ func startServer() {
 		Level: logLevel,
 	}))
 	adapter := NewAdapter(target, cache, logger, reasoningFrom, reasoningTo)
+
+	// Wrap adapter with logging middleware
+	handler := NewLoggingMiddleware(adapter, logger)
+
 	server := &http.Server{
 		Addr:    listen,
-		Handler: adapter,
+		Handler: handler,
 	}
 
 	go func() {
@@ -93,6 +98,107 @@ func init() {
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable debug output")
 	rootCmd.Flags().StringVar(&reasoningFrom, "reasoning-from", "reasoning_content", "Field name to use when reading reasoning from target server")
 	rootCmd.Flags().StringVar(&reasoningTo, "reasoning-to", "reasoning", "Field name to use when sending reasoning to user")
+}
+
+// LoggingMiddleware wraps an http.Handler and logs HTTP requests in Apache/nginx format
+type LoggingMiddleware struct {
+	handler http.Handler
+	logger  *slog.Logger
+}
+
+// NewLoggingMiddleware creates a new HTTP logging middleware
+func NewLoggingMiddleware(handler http.Handler, logger *slog.Logger) *LoggingMiddleware {
+	return &LoggingMiddleware{
+		handler: handler,
+		logger:  logger,
+	}
+}
+
+// responseWriter wraps http.ResponseWriter to capture status code and response size
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	size       int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	size, err := rw.ResponseWriter.Write(b)
+	rw.size += size
+	return size, err
+}
+
+func (m *LoggingMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+
+	// Wrap the response writer to capture status and size
+	rw := &responseWriter{
+		ResponseWriter: w,
+		statusCode:     200, // default status code
+		size:           0,
+	}
+
+	// Call the wrapped handler
+	m.handler.ServeHTTP(rw, r)
+
+	// Calculate request duration
+	duration := time.Since(start)
+
+	// Get client IP, preferring X-Forwarded-For or X-Real-IP headers
+	clientIP := getClientIP(r)
+
+	// Get user agent
+	userAgent := r.Header.Get("User-Agent")
+	if userAgent == "" {
+		userAgent = "-"
+	}
+
+	// Get referer
+	referer := r.Header.Get("Referer")
+	if referer == "" {
+		referer = "-"
+	}
+
+	// Log using structured logging fields
+	m.logger.Info("HTTP request",
+		"client_ip", clientIP,
+		"method", r.Method,
+		"path", r.RequestURI,
+		"protocol", r.Proto,
+		"status", rw.statusCode,
+		"size", rw.size,
+		"referer", referer,
+		"user_agent", userAgent,
+		"duration_ms", duration.Milliseconds(),
+	)
+}
+
+// getClientIP extracts the client IP from the request, checking proxy headers first
+func getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// X-Forwarded-For can contain multiple IPs, take the first one
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+
+	// Check X-Real-IP header
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	// Fall back to RemoteAddr
+	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx != -1 {
+		return r.RemoteAddr[:idx]
+	}
+
+	return r.RemoteAddr
 }
 
 func main() {
